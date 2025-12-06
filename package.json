@@ -8,7 +8,11 @@
     "dev": "cross-env NODE_ENV=development nodemon src/index.js",
     "test": "jest --coverage"
   },
-  "keywords": ["api-gateway", "reacher", "modular"],
+  "keywords": [
+    "api-gateway",
+    "reacher",
+    "modular"
+  ],
   "author": "Reacher Team",
   "license": "MIT",
   "dependencies": {
@@ -16,6 +20,7 @@
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "express-validator": "^7.3.1",
+    "http-proxy-middleware": "^3.0.5",
     "jsonwebtoken": "^9.0.2",
     "node-fetch": "^2.6.11",
     "redis": "^4.6.8"
