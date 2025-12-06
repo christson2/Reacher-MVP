@@ -1,0 +1,37 @@
+{
+  "name": "reacher-monorepo",
+  "version": "1.0.0",
+  "description": "Reacher MVP - Monorepo root package",
+  "private": true,
+  "workspaces": [
+    "gateway",
+    "backend/auth-service",
+    "backend/user-service",
+    "backend/product-service",
+    "backend/service-provider-service",
+    "backend/trust-service",
+    "backend/message-service",
+    "backend/notification-service",
+    "frontend"
+  ],
+  "scripts": {
+    "setup": "npm install && npm run db:setup",
+    "dev": "docker-compose up",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "db:setup": "docker-compose exec postgres psql -U postgres -d reacher_dev -f /docker-entrypoint-initdb.d/1-schema.sql",
+    "db:reset": "docker-compose down -v && docker-compose up -d postgres",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "build": "npm run build --workspaces",
+    "clean": "npm run clean --workspaces"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

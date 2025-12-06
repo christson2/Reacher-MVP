@@ -1,0 +1,27 @@
+db:
+  driver: postgres
+  url: postgresql://localhost:5432/reacher_dev
+
+studio:
+  enabled: true
+  port: 3001
+
+auth:
+  enable_signup: true
+  enable_email_confirmations: false
+  jwt_expiry_seconds: 86400
+  jwt_secret: dev-secret-key-change-in-production
+  
+  providers:
+    email:
+      enabled: true
+    phone:
+      enabled: false
+
+storage:
+  file_size_limit: 52428800  # 50MB
+  s3_protocol: https
+  
+edge_functions:
+  verify_payment: "./supabase/functions/verify_payment/index.ts"
+  send_notification: "./supabase/functions/send_notification/index.ts"
