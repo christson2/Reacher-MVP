@@ -21,7 +21,8 @@ interface AuthStore {
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
-  setUser: (user: User | null) => void;
+  setUser: (user: User | null, token?: string) => void;
+  setToken: (token: string) => void;
 }
 
 export const useAuthStore = create<AuthStore>((set) => ({
@@ -63,7 +64,15 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ user: null, token: null });
   },
 
-  setUser: (user) => {
-    set({ user });
+  setUser: (user, token) => {
+    if (token) {
+      apiClient.setToken(token);
+    }
+    set({ user, token });
+  },
+
+  setToken: (token) => {
+    apiClient.setToken(token);
+    set({ token });
   },
 }));
