@@ -1,44 +1,14 @@
-# Reacher Frontend
+# Reacher API Gateway
 
-Modern, modular Next.js + TypeScript frontend for Reacher MVP platform.
+Central entry point for all Reacher API requests. Validates JWT tokens, routes requests to microservices, and handles cross-cutting concerns like logging and rate limiting.
 
-## Architecture
-
-Follows **Atomic Design** pattern and **Clean Architecture** principles:
-
-```
-src/
-├── components/
-│   ├── atoms/           # Buttons, Inputs, Labels
-│   ├── molecules/       # Forms, Cards
-│   ├── organisms/       # Complex components
-│   ├── templates/       # Layout templates
-│   └── pages/           # Page components
-├── modules/             # Feature modules (auth, home, etc.)
-├── services/
-│   └── api/             # Centralized API client
-├── store/               # Zustand global state
-├── hooks/               # Custom React hooks
-├── utils/               # Utilities (validation, helpers)
-└── styles/              # Global styles
-```
-
-## Stack
-
-- **Framework:** Next.js 14 + React 18
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS
-- **State Management:** Zustand
-- **Data Fetching:** SWR (with custom axios client)
-- **UI:** Atomic Design Components
-
-## Setup
+## Quick Start
 
 ### Prerequisites
-- Node.js v18+
-- npm or yarn
+- Node.js v16+
+- Redis (for token blacklist)
 
-### Install Dependencies
+### Setup
 
 ```bash
 npm install
@@ -46,12 +16,22 @@ npm install
 
 ### Environment Variables
 
-Create `.env.local`:
+Create `.env` file:
 
 ```env
-NEXT_PUBLIC_API_URL=http://localhost:5000/api
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+NODE_ENV=development
+PORT=5000
+JWT_SECRET=your-secret-key-here
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# Service URLs (will be implemented)
+AUTH_SERVICE_URL=http://localhost:5001
+USER_SERVICE_URL=http://localhost:5002
+PRODUCT_SERVICE_URL=http://localhost:5003
+SERVICE_PROVIDER_SERVICE_URL=http://localhost:5004
+MESSAGE_SERVICE_URL=http://localhost:5005
+TRUST_SERVICE_URL=http://localhost:5006
 ```
 
 ### Running
@@ -61,38 +41,47 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 npm run dev
 ```
 
-Frontend runs at `http://localhost:3000`
-
-**Build:**
+**Production:**
 ```bash
-npm run build
 npm start
 ```
 
-**Type Check:**
-```bash
-npm run type-check
+Server listens on `http://localhost:5000` (or custom `PORT`).
+
+## API Endpoints
+
+### Public (No Auth Required)
+- `POST /api/auth/signup` — Create new user
+- `POST /api/auth/login` — Login and receive JWT
+
+### Protected (JWT Required)
+- `GET /api/users` — List users
+- `GET /api/products` — Search products
+- `GET /api/services` — Search services
+- `GET /api/messages` — List messages
+- `GET /api/trust` — View trust reports
+
+## Architecture
+
+```
+[Frontend] → [Gateway] → [Auth Service]
+                      → [User Service]
+                      → [Product Service]
+                      → [Message Service]
+                      → [Trust Service]
+                      ...
 ```
 
-**Linting:**
+- **Gateway** validates JWT and forwards requests to appropriate microservices
+- **Redis** maintains token blacklist for logout functionality
+- Each service handles its own business logic and database
+
+## Testing
+
 ```bash
-npm run lint
+npm test
 ```
 
-## Key Features
+## Deployment
 
-- **Modular Components:** Reusable atoms, molecules, organisms
-- **Type-Safe:** Full TypeScript support
-- **Global State:** Zustand for auth and app state
-- **API Integration:** Centralized API client with interceptors
-- **Responsive Design:** Tailwind CSS responsive utilities
-- **Performance:** Code splitting and lazy loading ready
-
-## Next Steps
-
-1. Implement Login/Signup modules
-2. Create Dashboard layouts (Consumer, Seller, Provider)
-3. Build Product/Service discovery pages
-4. Add real-time features (messaging, notifications)
-5. Integrate Supabase authentication
-6. Add form validation and error handling
+See root `README.md` for deployment instructions.
