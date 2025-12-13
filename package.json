@@ -1,36 +1,33 @@
 {
-  "name": "reacher-frontend",
+  "name": "reacher-gateway",
   "version": "1.0.0",
-  "description": "Frontend for Reacher MVP platform",
-  "private": true,
+  "description": "API Gateway for Reacher modular MVP platform",
+  "main": "src/index.js",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "start": "node src/index.js",
+    "dev": "cross-env NODE_ENV=development nodemon src/index.js",
+    "test": "jest --coverage"
   },
+  "keywords": [
+    "api-gateway",
+    "reacher",
+    "modular"
+  ],
+  "author": "Reacher Team",
+  "license": "MIT",
   "dependencies": {
-    "next": "^14.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "swr": "^2.2.2",
-    "zustand": "^4.4.0",
-    "axios": "^1.5.0",
-    "tailwindcss": "^3.3.5",
-    "classnames": "^2.3.2"
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "express-validator": "^7.3.1",
+    "http-proxy-middleware": "^3.0.5",
+    "jsonwebtoken": "^9.0.2",
+    "node-fetch": "^2.6.11",
+    "redis": "^4.6.8"
   },
   "devDependencies": {
-    "@types/node": "^20.6.0",
-    "@types/react": "^18.2.21",
-    "@types/react-dom": "^18.2.7",
-    "@typescript-eslint/eslint-plugin": "^6.5.0",
-    "@typescript-eslint/parser": "^6.5.0",
-    "autoprefixer": "^10.4.16",
-    "eslint": "^8.49.0",
-    "eslint-config-next": "^14.0.0",
-    "postcss": "^8.4.31",
-    "tailwindcss": "^3.3.5",
-    "typescript": "^5.2.2"
+    "cross-env": "^10.1.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.1"
   }
 }
