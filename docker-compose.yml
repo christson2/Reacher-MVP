@@ -1,0 +1,79 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: reacher-postgres
+    environment:
+      POSTGRES_DB: reacher_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: reacher-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Auth Service (only backend service currently present)
+  auth-service:
+    image: node:18-alpine
+    container_name: reacher-auth-service
+    environment:
+      NODE_ENV: development
+      PORT: 5001
+      JWT_SECRET: dev-secret-key
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/reacher_dev
+    ports:
+      - "5001:5001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    working_dir: /app
+    volumes:
+      - ./backend/auth-service:/app
+      - /app/node_modules
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+
+  # Frontend (existing)
+  frontend:
+    image: node:18-alpine
+    container_name: reacher-frontend
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_API_URL: http://localhost:5001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - auth-service
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    command: sh -c "npm install --no-audit --no-fund && npm run dev -- -H 0.0.0.0"
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  default:
+    name: reacher-network
