@@ -45,18 +45,22 @@ export interface VerifyResponse {
  */
 export async function signup(data: SignupRequest): Promise<AuthResponse> {
   try {
-    const response = await apiClient.post('/api/auth/signup', data);
-    
-    // Store token in localStorage via apiClient interceptor
-    if (response.data.token) {
-      localStorage.setItem('token', response.data.token);
+    // apiClient.baseURL already includes the `/api` prefix (gateway),
+    // so call the auth path relative to that base ("/auth/...")
+    const response = await apiClient.post('/auth/signup', data);
+
+    // `apiClient.post` returns the response data directly
+    if (response.token) {
+      localStorage.setItem('token', response.token);
     }
-    
-    return response.data;
+
+    return response;
   } catch (error: any) {
+    // Propagate backend error to caller. Do not return a development
+    // fallback token — frontend should rely on the real auth service.
     throw new Error(
-      error.response?.data?.error || 
-      error.message || 
+      error.response?.data?.error ||
+      error.message ||
       'Signup failed'
     );
   }
@@ -69,18 +73,18 @@ export async function signup(data: SignupRequest): Promise<AuthResponse> {
  */
 export async function login(data: LoginRequest): Promise<AuthResponse> {
   try {
-    const response = await apiClient.post('/api/auth/login', data);
-    
-    // Store token in localStorage via apiClient interceptor
-    if (response.data.token) {
-      localStorage.setItem('token', response.data.token);
+    const response = await apiClient.post('/auth/login', data);
+
+    if (response.token) {
+      localStorage.setItem('token', response.token);
     }
-    
-    return response.data;
+
+    return response;
   } catch (error: any) {
+    // Propagate backend error to caller. No development fallback here.
     throw new Error(
-      error.response?.data?.error || 
-      error.message || 
+      error.response?.data?.error ||
+      error.message ||
       'Login failed'
     );
   }

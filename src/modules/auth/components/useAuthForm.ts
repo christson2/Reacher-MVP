@@ -109,8 +109,8 @@ export function useAuthForm(options?: UseAuthFormOptions) {
           options.onSuccess();
         }
 
-        // Redirect if specified
-        const redirectPath = options?.redirectTo || '/dashboard';
+        // Redirect if specified (default to landing)
+        const redirectPath = options?.redirectTo || '/';
         router.push(redirectPath);
       } catch (err: any) {
         setError(err.message || 'An error occurred. Please try again.');

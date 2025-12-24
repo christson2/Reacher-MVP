@@ -10,7 +10,7 @@ import { login } from '../services/auth-api';
 
 export default function LoginPage() {
   const { isLoading, error, formErrors, clearError, handleSubmit } = useAuthForm({
-    redirectTo: '/dashboard',
+    redirectTo: '/',
   });
 
   const [formData, setFormData] = useState({

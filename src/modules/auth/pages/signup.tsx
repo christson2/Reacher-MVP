@@ -13,7 +13,7 @@ import { signup } from '../services/auth-api';
 export default function SignupPage() {
   const router = useRouter();
   const { isLoading, error, formErrors, clearError, handleSubmit } = useAuthForm({
-    redirectTo: '/dashboard',
+    redirectTo: '/',
   });
 
   const [formData, setFormData] = useState({
