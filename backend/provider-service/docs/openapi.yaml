@@ -1,0 +1,84 @@
+openapi: 3.0.0
+info:
+  title: Provider Service API
+  version: 0.1.0
+paths:
+  /api/provider/profile:
+    post:
+      summary: Create provider profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                provider_type:
+                  type: string
+                display_name:
+                  type: string
+                location_country:
+                  type: string
+      responses:
+        '201':
+          description: Created
+  /api/provider/services:
+    post:
+      summary: Create ServiceOffering
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                category_id:
+                  type: string
+                service_mode:
+                  type: string
+                coverage_scope:
+                  type: string
+                pricing_model:
+                  type: string
+                raw_service_input:
+                  type: string
+                service_role_or_name:
+                  type: string
+      responses:
+        '201':
+          description: Created
+  /api/provider/services/{id}/settings:
+    post:
+      summary: Create key/value setting for a service
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                key:
+                  type: string
+                value:
+                  type: string
+      responses:
+        '201':
+          description: Created
+    get:
+      summary: List service settings
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+components: {}

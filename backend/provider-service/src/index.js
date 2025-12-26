@@ -299,6 +299,31 @@ app.put('/api/provider/addresses/:id', requireAuth, (req, res) => {
   res.json({ success: true, data: updated });
 });
 
+// Service settings endpoints (key/value)
+app.post('/api/provider/services/:id/settings', requireAuth, (req, res) => {
+  const payload = req.body || {};
+  const user_id = req.userId;
+  const profile = db.getProviderByUserId(user_id);
+  if (!profile) return res.status(400).json({ success: false, error: 'Provider profile required' });
+  const svc = db.getServiceById(req.params.id);
+  if (!svc) return res.status(404).json({ success: false, error: 'Service not found' });
+  if (svc.provider_id !== profile.id) return res.status(403).json({ success: false, error: 'Not allowed' });
+  if (!payload.key) return res.status(400).json({ success: false, error: 'key is required' });
+  const setting = db.insertServiceSetting({ service_id: svc.id, key: payload.key, value: payload.value || '' });
+  res.status(201).json({ success: true, data: setting });
+});
+
+app.get('/api/provider/services/:id/settings', requireAuth, (req, res) => {
+  const user_id = req.userId;
+  const profile = db.getProviderByUserId(user_id);
+  if (!profile) return res.status(400).json({ success: false, error: 'Provider profile required' });
+  const svc = db.getServiceById(req.params.id);
+  if (!svc) return res.status(404).json({ success: false, error: 'Service not found' });
+  if (svc.provider_id !== profile.id) return res.status(403).json({ success: false, error: 'Not allowed' });
+  const settings = db.getSettingsByServiceId(svc.id);
+  res.json({ success: true, data: settings });
+});
+
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'provider' }));
 
 if (require.main === module) {

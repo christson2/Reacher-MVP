@@ -23,9 +23,13 @@ All endpoints require authentication. For local development the header `Authoriz
 - `GET /api/services/search?q=&category_id=&service_mode=&coverage_scope=&location_city=&location_state=&location_country=` — local-first search. Location precedence: explicit query params &gt; authenticated user's provider location &gt; headers fallback (`x-user-city`, `x-user-state`, `x-user-country`).
 
 ## Addresses
-- `POST /api/provider/addresses` — create an address for the authenticated provider. Required: `raw_address`.
-- `PUT /api/provider/addresses/{id}` — update address (owner only); updating `raw_address` re-runs deterministic parsing (best-effort) and updates `address_confidence`.
 
+## Service settings (extensibility)
+- `POST /api/provider/services/{id}/settings` — create a key/value setting for the provider's service. Required: `key`.
+- `GET /api/provider/services/{id}/settings` — list key/value settings for the authenticated provider's service.
 ## Extensibility
+## Categorizer
+- A pluggable categorizer runs during service creation and may populate `suggested_category_id` and `suggested_category_path` on the service (non-authoritative). The categorizer is a heuristic placeholder and can be replaced with an AI/pluggable implementation later.
 - The system supports `service_settings` (key/value) for future optional settings. Use `service_settings` in the JSON store; API endpoints for settings are planned.
+
 
