@@ -7,6 +7,9 @@ const db = require('./db');
 const categorizer = require('./categorizer');
 const fs = require('fs');
 const path = require('path');
+const ranking = require('./services/ranking');
+const trustSvc = require('./services/trust');
+const market = require('./services/market');
 
 const app = express();
 const PORT = process.env.PORT || 5004;
@@ -271,7 +274,60 @@ app.get('/api/services/search', requireAuth, (req, res) => {
   }
 
   const rows = db.searchServices({ q, category_id, service_mode, coverage_scope, location: loc, explicitLocation: explicitLoc });
-  res.json({ success: true, data: rows });
+  // Enhance results with explainable scores: trust, distance estimate, price/market, final_score
+  try {
+    const enhanced = rows.map(r => {
+      const svc = r;
+      const provider = svc.provider || db.getProviderById(svc.provider_id) || {};
+
+      // Estimate distance (simple heuristic)
+      function estimateDistanceKm(p, loc) {
+        if (!p || !loc) return null;
+        if (p.location_city && loc.city && p.location_city.toLowerCase() === loc.city.toLowerCase()) return 1;
+        if (p.location_state && loc.state && p.location_state.toLowerCase() === loc.state.toLowerCase()) return 20;
+        if (p.location_country && loc.country && p.location_country.toLowerCase() === loc.country.toLowerCase()) return 200;
+        return 1000;
+      }
+
+      const distance_km = estimateDistanceKm(provider, loc);
+
+      // Derive simple relevance: presence of query gives medium relevance
+      const relevance_score = q ? 0.6 : 0.3;
+
+      // Availability: default optimistic (can be replaced by real calendar/slot data)
+      const availability_score = 0.8;
+
+      // Try to extract a numeric price from service settings (best-effort)
+      let price = null;
+      try {
+        const settings = db.getSettingsByServiceId(svc.id) || [];
+        for (const s of settings) {
+          const key = (s.key || '').toLowerCase();
+          if (/(price|rate|amount|fee)/.test(key)) {
+            const v = parseFloat(s.value);
+            if (!isNaN(v)) { price = v; break; }
+          }
+        }
+      } catch (e) {}
+
+      // Compute a local market average fallback (best-effort using this service price)
+      let marketAgg = null;
+      try { if (price !== null) marketAgg = market.aggregatePrices([price]); } catch (e) { marketAgg = null; }
+
+      // Compute trust using available provider fields; stats/reviews not available here (could be extended)
+      const trustRes = trustSvc.computeTrustScore(provider, {});
+
+      const final = ranking.computeFinalScore({ distance_km, relevance_score, trust_score: trustRes.trust_score, price, marketAvg: marketAgg ? marketAgg.avg_price : null, availability_score });
+
+      return { ...svc, provider, distance_km, price, market: marketAgg, trust: trustRes, final_score: final.final_score, score_components: final.components };
+    });
+
+    // sort by final_score if present
+    enhanced.sort((a,b) => (b.final_score || 0) - (a.final_score || 0));
+    return res.json({ success: true, data: enhanced });
+  } catch (e) {
+    return res.json({ success: true, data: rows });
+  }
 });
 
 // Addresses endpoints
