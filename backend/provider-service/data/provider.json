@@ -1,0 +1,66 @@
+{
+  "provider_profiles": [
+    {
+      "id": "cad9bdae-1900-4480-a860-d49db13f8708",
+      "user_id": "dev-user",
+      "provider_type": "individual",
+      "display_name": "P1",
+      "bio": null,
+      "profile_image_url": null,
+      "location_country": "Neverland",
+      "location_state": null,
+      "location_city": null,
+      "is_verified": false,
+      "verification_level": "none",
+      "is_active": true,
+      "created_at": "2025-12-26T09:06:15.221Z"
+    }
+  ],
+  "service_categories": [
+    {
+      "id": "cat-1",
+      "name": "Fitness",
+      "slug": "fitness",
+      "parent_id": null,
+      "level": 0,
+      "description": null,
+      "is_active": true,
+      "created_at": "2025-12-26T09:06:14.896Z"
+    },
+    {
+      "id": "cat-2",
+      "name": "Yoga",
+      "slug": "yoga",
+      "parent_id": "cat-1",
+      "level": 1,
+      "description": null,
+      "is_active": true,
+      "created_at": "2025-12-26T09:06:14.896Z"
+    }
+  ],
+  "services": [],
+  "trainer_profiles": [],
+  "agency_profiles": [],
+  "addresses": [
+    {
+      "id": "e0132e9a-3e4b-4646-b3e7-b161eacf629b",
+      "provider_id": "cad9bdae-1900-4480-a860-d49db13f8708",
+      "service_id": null,
+      "raw_address": "9 New St, SomeTown, Neverland",
+      "premise": "9",
+      "street": "9 New St",
+      "community": "Aduralere Quarters",
+      "area": null,
+      "district": null,
+      "city": null,
+      "state": null,
+      "country": "Neverland",
+      "latitude": null,
+      "longitude": null,
+      "address_confidence": 30,
+      "created_at": "2025-12-26T09:06:15.229Z",
+      "updated_at": "2025-12-26T09:06:15.245Z"
+    }
+  ],
+  "service_settings": []
+}
