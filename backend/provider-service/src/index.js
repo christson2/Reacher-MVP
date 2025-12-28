@@ -10,6 +10,7 @@ const path = require('path');
 const ranking = require('./services/ranking');
 const trustSvc = require('./services/trust');
 const market = require('./services/market');
+// marketplace modules use db directly
 
 const app = express();
 const PORT = process.env.PORT || 5004;
@@ -381,6 +382,293 @@ app.get('/api/provider/services/:id/settings', requireAuth, (req, res) => {
 });
 
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'provider' }));
+
+// Serve API docs and OpenAPI spec
+app.get('/docs/openapi.yaml', (req, res) => {
+  try {
+    const p = path.join(__dirname, '..', 'docs', 'openapi.yaml');
+    if (!fs.existsSync(p)) return res.status(404).send('OpenAPI spec not found');
+    const src = fs.readFileSync(p, 'utf8');
+    res.type('yaml').send(src);
+  } catch (e) {
+    res.status(500).send('error');
+  }
+});
+
+app.get('/docs', (req, res) => {
+  try {
+    const p = path.join(__dirname, '..', 'docs', 'API.md');
+    if (!fs.existsSync(p)) return res.status(404).send('API docs not found');
+    const src = fs.readFileSync(p, 'utf8');
+    res.type('text').send(src);
+  } catch (e) {
+    res.status(500).send('error');
+  }
+});
+
+// --- Payments & Escrow ---
+app.post('/api/payments', requireAuth, (req, res) => {
+  const payload = req.body || {};
+  if (!payload.payee_id || !payload.amount) return res.status(400).json({ success: false, error: 'payee_id and amount required' });
+  const payer_id = req.userId;
+  const payment = db.insertPayment({ payer_id, payee_id: payload.payee_id, amount: payload.amount, currency: payload.currency, payment_mode: payload.payment_mode || 'direct', status: 'pending' });
+  let escrow = null;
+  if (payment.payment_mode === 'escrow') {
+    // create escrow record linked to payment
+    escrow = db.insertEscrow({ payment_id: payment.id, release_condition: payload.release_condition || 'job_completed', status: 'held' });
+  }
+  res.status(201).json({ success: true, data: { payment, escrow } });
+});
+
+app.get('/api/payments/:id', requireAuth, (req, res) => {
+  const p = db.getPaymentById(req.params.id);
+  if (!p) return res.status(404).json({ success: false, error: 'payment not found' });
+  res.json({ success: true, data: p });
+});
+
+app.post('/api/escrows/:id/release', requireAuth, (req, res) => {
+  const id = req.params.id;
+  const esc = db.getEscrowById(id);
+  if (!esc) return res.status(404).json({ success: false, error: 'escrow not found' });
+  const payload = req.body || {};
+  // Only allow release if condition satisfied
+  if (esc.release_condition === 'job_completed') {
+    if (!payload.job_completed) return res.status(400).json({ success: false, error: 'job must be completed to release escrow' });
+  }
+  // Manual release allowed for trusted operators (dev-token) — simple check
+  if (payload.force_release && req.headers.authorization !== 'Bearer dev-token') return res.status(403).json({ success: false, error: 'not allowed' });
+  const now = new Date().toISOString();
+  const updated = db.updateEscrow(id, { status: 'released', released_at: now });
+  // update payment status if present
+  const payment = db.getPaymentById(esc.payment_id);
+  if (payment) db.insertPayment({ ...payment, status: 'released' });
+  res.json({ success: true, data: updated });
+});
+
+// --- Jobs marketplace ---
+app.post('/api/jobs', requireAuth, (req, res) => {
+  const payload = req.body || {};
+  if (!payload.title) return res.status(400).json({ success: false, error: 'title required' });
+  const posted_by = req.userId;
+  const job = db.insertJob({ title: payload.title, description: payload.description, category_path: payload.category_path, job_type: payload.job_type, location_scope: payload.location_scope, salary_range: payload.salary_range, posted_by });
+  res.status(201).json({ success: true, data: job });
+});
+
+app.post('/api/jobs/:id/apply', requireAuth, (req, res) => {
+  const job = db.getJobById(req.params.id);
+  if (!job) return res.status(404).json({ success: false, error: 'job not found' });
+  const applicant_id = req.userId;
+  const appRec = db.insertJobApplication({ job_id: job.id, applicant_id, message: (req.body||{}).message });
+  res.status(201).json({ success: true, data: appRec });
+});
+
+app.get('/api/jobs/:id/applications', requireAuth, (req, res) => {
+  const job = db.getJobById(req.params.id);
+  if (!job) return res.status(404).json({ success: false, error: 'job not found' });
+  if (job.posted_by !== req.userId) return res.status(403).json({ success: false, error: 'not allowed' });
+  const apps = db.getApplicationsByJobId(job.id);
+  res.json({ success: true, data: apps });
+});
+
+// --- Digital products ---
+app.post('/api/digital', requireAuth, (req, res) => {
+  const payload = req.body || {};
+  if (!payload.title) return res.status(400).json({ success: false, error: 'title required' });
+  const creator_id = req.userId;
+  const p = db.insertDigitalProduct({ creator_id, title: payload.title, description: payload.description, category_path: payload.category_path, price: payload.price, access_type: payload.access_type });
+  res.status(201).json({ success: true, data: p });
+});
+
+app.post('/api/digital/:id/purchase', requireAuth, (req, res) => {
+  const product = db.getProductById(req.params.id);
+  if (!product) return res.status(404).json({ success: false, error: 'product not found' });
+  const buyer_id = req.userId;
+  const pur = db.insertPurchase({ product_id: product.id, buyer_id, amount: product.price, currency: 'USD' });
+  res.status(201).json({ success: true, data: pur });
+});
+
+app.get('/api/digital/:id/access', requireAuth, (req, res) => {
+  const product = db.getProductById(req.params.id);
+  if (!product) return res.status(404).json({ success: false, error: 'product not found' });
+  const has = db.hasAccessToProduct(product.id, req.userId);
+  res.json({ success: true, data: { access: !!has } });
+});
+
+// --- Subscriptions ---
+app.post('/api/subscription/plans', requireAuth, (req, res) => {
+  const payload = req.body || {};
+  if (!payload.name) return res.status(400).json({ success: false, error: 'name required' });
+  const plan = db.insertSubscriptionPlan({ name: payload.name, benefits: payload.benefits || [], price: payload.price || 0, billing_cycle: payload.billing_cycle || 'monthly' });
+  res.status(201).json({ success: true, data: plan });
+});
+
+app.post('/api/provider/subscriptions', requireAuth, (req, res) => {
+  const profile = db.getProviderByUserId(req.userId);
+  if (!profile) return res.status(400).json({ success: false, error: 'provider profile required' });
+  const plan = db.getSubscriptionPlanById((req.body||{}).plan_id);
+  if (!plan) return res.status(400).json({ success: false, error: 'invalid plan' });
+  const sub = db.subscribeProvider({ provider_id: profile.id, plan_id: plan.id });
+  res.status(201).json({ success: true, data: sub });
+});
+
+app.get('/api/provider/subscriptions/me', requireAuth, (req, res) => {
+  const profile = db.getProviderByUserId(req.userId);
+  if (!profile) return res.status(200).json({ success: true, data: null });
+  const s = db.getProviderSubscription(profile.id);
+  res.json({ success: true, data: s || null });
+});
+
+// --- Recommendations (explainable, rule-based) ---
+app.get('/api/recommendations', requireAuth, (req, res) => {
+  const q = req.query.q || null;
+  const category_id = req.query.category_id || null;
+  // start with service recommendations
+  const services = db.searchServices({ q, category_id, location: {}, explicitLocation: false }) || [];
+  let servicesList = services;
+  if (!servicesList || servicesList.length === 0) servicesList = db.getAllServices() || [];
+  const recs = [];
+  for (const s of servicesList.slice(0,10)) {
+    const provider = db.getProviderById(s.provider_id) || {};
+    const reasons = [];
+    let confidence = 0.5;
+    if (provider.verification_level === 'trusted') { reasons.push('trusted'); confidence += 0.2; }
+    if (s.tags && s.tags.length) { reasons.push('matches_tags'); confidence += 0.1; }
+    // affordability
+    const settings = db.getSettingsByServiceId(s.id) || [];
+    const priceSetting = settings.find(x => /(price|rate|amount|fee)/i.test(x.key));
+    if (priceSetting) {
+      const v = parseFloat(priceSetting.value);
+      if (!isNaN(v)) { reasons.push('price_available'); confidence += 0.05; }
+    }
+    recs.push({ target_id: s.id, target_type: 'service', reason_codes: reasons, confidence_score: Math.max(0, Math.min(1, confidence)) });
+  }
+  res.json({ success: true, data: recs });
+});
+
+// --- Requests & Quotes (request-driven marketplace) ---
+app.post('/api/requests', requireAuth, (req, res) => {
+  const payload = req.body || {};
+  if (!payload.title) return res.status(400).json({ success: false, error: 'title required' });
+  const userId = req.userId;
+  const r = db.insertRequest({ title: payload.title, description: payload.description, category_path: payload.category_path, location: payload.location, budget_min: payload.budget_min, budget_max: payload.budget_max, posted_by: userId });
+  res.status(201).json({ success: true, data: r });
+});
+
+app.get('/api/requests', requireAuth, (req, res) => {
+  const q = req.query || {};
+  const rows = db.searchRequests({ category_path: q.category_path, location: q.location, budget_min: q.budget_min, budget_max: q.budget_max });
+  res.json({ success: true, data: rows });
+});
+
+app.get('/api/requests/:id', requireAuth, (req, res) => {
+  const r = db.getRequestById(req.params.id);
+  if (!r) return res.status(404).json({ success: false, error: 'request not found' });
+  const quotes = db.getQuotesByRequestId(r.id);
+  res.json({ success: true, data: { request: r, quotes } });
+});
+
+// Providers submit a single quote per request. Enforce per-provider limit by subscription/frequency.
+app.post('/api/requests/:id/quotes', requireAuth, (req, res) => {
+  const payload = req.body || {};
+  const requestId = req.params.id;
+  const reqRec = db.getRequestById(requestId);
+  if (!reqRec) return res.status(404).json({ success: false, error: 'request not found' });
+  const provider = db.getProviderByUserId(req.userId);
+  if (!provider) return res.status(400).json({ success: false, error: 'provider profile required to quote' });
+
+  // Rate-limit: subscription-based or free tier
+  const quotesInWindow = db.countQuotesByProviderInWindow(provider.id, 7);
+  const plan = db.getProviderSubscription(provider.id);
+  const freeLimit = 5; const paidLimit = 1000;
+  const allowed = plan ? paidLimit : freeLimit;
+  if (quotesInWindow >= allowed) return res.status(429).json({ success: false, error: 'quote limit reached for your plan' });
+
+  // prevent duplicate quote by same provider for same request
+  const existing = db.getQuotesByRequestId(requestId).find(q => q.provider_id === provider.id);
+  if (existing) return res.status(409).json({ success: false, error: 'already quoted' });
+
+  const quote = db.insertQuote({ request_id: requestId, provider_id: provider.id, amount: payload.amount, message: payload.message });
+  res.status(201).json({ success: true, data: quote });
+});
+
+// Request owner accepts a quote -> create payment and optional escrow, update statuses
+app.post('/api/requests/:id/accept-quote', requireAuth, (req, res) => {
+  const payload = req.body || {};
+  const requestId = req.params.id;
+  const quoteId = payload.quote_id;
+  if (!quoteId) return res.status(400).json({ success: false, error: 'quote_id required' });
+  const reqRec = db.getRequestById(requestId);
+  if (!reqRec) return res.status(404).json({ success: false, error: 'request not found' });
+  if (reqRec.posted_by !== req.userId) return res.status(403).json({ success: false, error: 'not allowed' });
+  const quote = db.getQuoteById(quoteId);
+  if (!quote || quote.request_id !== requestId) return res.status(404).json({ success: false, error: 'quote not found' });
+
+  // create payment record; if escrow requested, create escrow
+  const payment_mode = payload.payment_mode || 'escrow';
+  const payment = db.insertPayment({ payer_id: req.userId, payee_id: quote.provider_id, amount: quote.amount, currency: payload.currency || 'USD', payment_mode, status: 'pending' });
+  let escrow = null;
+  if (payment.payment_mode === 'escrow') {
+    escrow = db.insertEscrow({ payment_id: payment.id, release_condition: 'job_completed', status: 'held' });
+  }
+
+  // update request and quote statuses
+  db.updateRequest(requestId, { status: 'assigned', assigned_quote_id: quote.id, assigned_provider_id: quote.provider_id });
+  db.updateQuote(quote.id, { status: 'accepted' });
+
+  res.json({ success: true, data: { payment, escrow, request: db.getRequestById(requestId), quote: db.getQuoteById(quote.id) } });
+});
+
+// --- Consumer endpoints ---
+app.post('/api/consumer/profile', requireAuth, (req, res) => {
+  const payload = req.body || {};
+  const user_id = req.userId;
+  if (!payload.full_name || !payload.location_country) return res.status(400).json({ success: false, error: 'full_name and location_country required' });
+  // reuse provider_profiles for consumer records (lightweight)
+  const id = require('uuid').v4();
+  const profile = { id, user_id, provider_type: 'consumer', display_name: payload.full_name, phone: payload.phone || null, location_country: payload.location_country, location_state: payload.location_state || null, location_city: payload.location_city || null, profile_photo: payload.profile_photo || null, created_at: new Date().toISOString() };
+  db.insertProvider(profile);
+  res.status(201).json({ success: true, data: db.getProviderById(id) });
+});
+
+app.get('/api/consumer/requests/me', requireAuth, (req, res) => {
+  const rows = db.getRequestsByUser(req.userId);
+  res.json({ success: true, data: rows });
+});
+
+// --- Provider nearby requests ---
+app.get('/api/provider/requests/nearby', requireAuth, (req, res) => {
+  const provider = db.getProviderByUserId(req.userId);
+  if (!provider) return res.status(400).json({ success: false, error: 'provider profile required' });
+  // find primary service or any
+  const services = db.getServicesByProviderId(provider.id) || [];
+  const primary = services.find(s => s.is_primary) || services[0] || null;
+  // determine radius from settings or default 5km
+  let radiusKm = 5;
+  try {
+    if (primary) {
+      const settings = db.getSettingsByServiceId(primary.id) || [];
+      const rset = settings.find(s => (s.key||'').toLowerCase() === 'service_radius');
+      if (rset) {
+        const rv = parseFloat(rset.value);
+        if (!isNaN(rv)) radiusKm = rv;
+      }
+    }
+  } catch (e) {}
+
+  const all = db.searchRequests({});
+  const matches = [];
+  for (const r of all) {
+    // heuristic distance: match city/state/country
+    let dist = 1000;
+    if (r.location && provider.location_city && r.location.city && provider.location_city.toLowerCase() === r.location.city.toLowerCase()) dist = 1;
+    else if (r.location && provider.location_state && r.location.state && provider.location_state && provider.location_state.toLowerCase() === r.location.state.toLowerCase()) dist = 20;
+    else if (r.location && provider.location_country && r.location.country && provider.location_country && provider.location_country.toLowerCase() === r.location.country.toLowerCase()) dist = 200;
+    if (dist <= radiusKm) matches.push({ ...r, distance_km: dist });
+  }
+  // sort by distance then by created_at
+  matches.sort((a,b) => (a.distance_km - b.distance_km) || (new Date(b.created_at) - new Date(a.created_at)));
+  res.json({ success: true, data: matches });
+});
 
 if (require.main === module) {
   app.listen(PORT, '0.0.0.0', () => console.log(`[Provider] listening on http://0.0.0.0:${PORT}`));

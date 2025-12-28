@@ -7,7 +7,31 @@ const FILE = process.env.DB_FILE || path.join(__dirname, '..', 'data', 'provider
 function read() {
   try {
     const raw = fs.readFileSync(FILE, 'utf8');
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    // ensure all expected collections exist for backward compatibility
+    const defaults = {
+      provider_profiles: [],
+      service_categories: [],
+      services: [],
+      trainer_profiles: [],
+      agency_profiles: [],
+      addresses: [],
+      service_settings: [],
+      payments: [],
+      escrows: [],
+      jobs: [],
+      job_applications: [],
+      digital_products: [],
+      purchases: [],
+      subscription_plans: [],
+      provider_subscriptions: []
+      ,
+      // request-driven marketplace
+      requests: [],
+      quotes: []
+    };
+    for (const k of Object.keys(defaults)) if (!Object.prototype.hasOwnProperty.call(parsed, k)) parsed[k] = defaults[k];
+    return parsed;
   } catch (e) {
     return {
       provider_profiles: [],
@@ -16,7 +40,16 @@ function read() {
       trainer_profiles: [],
       agency_profiles: [],
       addresses: [],
-      service_settings: []
+      service_settings: [],
+      // Marketplace / Monetization collections
+      payments: [],
+      escrows: [],
+      jobs: [],
+      job_applications: [],
+      digital_products: [],
+      purchases: [],
+      subscription_plans: [],
+      provider_subscriptions: []
     };
   }
 }
@@ -161,6 +194,7 @@ function insertService(svc) { const d = read(); d.services.push(svc); write(d); 
 function getServiceById(id) { const d = read(); return d.services.find(s => s.id === id); }
 function updateService(id, fields) { const d = read(); d.services = d.services.map(s => s.id === id ? { ...s, ...fields } : s); write(d); }
 function getServicesByProviderId(provider_id) { const d = read(); return d.services.filter(s => s.provider_id === provider_id); }
+function getAllServices() { const d = read(); return d.services.filter(s => s.is_active); }
 function searchServices({ q, category_id, service_mode, coverage_scope }) {
   // New signature supports location-aware, tiered search.
   // Accepts: { q, category_id, service_mode, coverage_scope, location: { country, state, city }, explicitLocation }
@@ -326,6 +360,98 @@ function updateAddress(id, fields) {
   return updated;
 }
 
+// Payments & Escrow
+function insertPayment(payment) { const d = read(); const now = new Date().toISOString(); const p = { id: payment.id || uuidv4(), payer_id: payment.payer_id, payee_id: payment.payee_id, amount: payment.amount, currency: payment.currency || 'USD', payment_mode: payment.payment_mode || 'direct', status: payment.status || 'pending', created_at: now }; d.payments.push(p); write(d); return p; }
+function getPaymentById(id) { const d = read(); return d.payments.find(p => p.id === id); }
+
+function insertEscrow(e) { const d = read(); const now = new Date().toISOString(); const esc = { id: e.id || uuidv4(), payment_id: e.payment_id, release_condition: e.release_condition || 'manual', status: e.status || 'held', created_at: now, released_at: null }; d.escrows.push(esc); write(d); return esc; }
+function getEscrowById(id) { const d = read(); return d.escrows.find(x => x.id === id); }
+function updateEscrow(id, fields) { const d = read(); let updated = null; d.escrows = d.escrows.map(x => { if (x.id !== id) return x; const merged = { ...x, ...fields }; if (fields.released_at) merged.released_at = fields.released_at; updated = merged; return merged; }); write(d); return updated; }
+
+// Jobs marketplace
+function insertJob(job) { const d = read(); const now = new Date().toISOString(); const j = { id: job.id || uuidv4(), title: job.title, description: job.description || '', category_path: job.category_path || null, job_type: job.job_type || 'gig', location_scope: job.location_scope || 'local', salary_range: job.salary_range || null, posted_by: job.posted_by, status: job.status || 'open', created_at: now }; d.jobs.push(j); write(d); return j; }
+function getJobById(id) { const d = read(); return d.jobs.find(j => j.id === id); }
+
+function insertJobApplication(app) { const d = read(); const now = new Date().toISOString(); const a = { id: app.id || uuidv4(), job_id: app.job_id, applicant_id: app.applicant_id, message: app.message || null, status: app.status || 'applied', applied_at: now }; d.job_applications.push(a); write(d); return a; }
+function getApplicationsByJobId(job_id) { const d = read(); return d.job_applications.filter(a => a.job_id === job_id); }
+
+// Digital products
+function insertDigitalProduct(p) { const d = read(); const now = new Date().toISOString(); const prod = { id: p.id || uuidv4(), creator_id: p.creator_id, title: p.title, description: p.description || '', category_path: p.category_path || null, price: p.price || 0, access_type: p.access_type || 'download', status: p.status || 'active', created_at: now }; d.digital_products.push(prod); write(d); return prod; }
+function getProductById(id) { const d = read(); return d.digital_products.find(x => x.id === id); }
+function insertPurchase(rec) { const d = read(); const now = new Date().toISOString(); const pur = { id: rec.id || uuidv4(), product_id: rec.product_id, buyer_id: rec.buyer_id, amount: rec.amount || 0, currency: rec.currency || 'USD', created_at: now }; d.purchases.push(pur); write(d); return pur; }
+function hasAccessToProduct(product_id, user_id) { const d = read(); return d.purchases.some(p => p.product_id === product_id && p.buyer_id === user_id); }
+
+// Subscriptions
+function insertSubscriptionPlan(plan) { const d = read(); const now = new Date().toISOString(); const p = { id: plan.id || uuidv4(), name: plan.name, benefits: plan.benefits || [], price: plan.price || 0, billing_cycle: plan.billing_cycle || 'monthly', created_at: now }; d.subscription_plans.push(p); write(d); return p; }
+function getSubscriptionPlanById(id) { const d = read(); return d.subscription_plans.find(p => p.id === id); }
+function subscribeProvider(rec) { const d = read(); const now = new Date().toISOString(); const s = { id: rec.id || uuidv4(), provider_id: rec.provider_id, plan_id: rec.plan_id, status: rec.status || 'active', started_at: now }; d.provider_subscriptions.push(s); write(d); return s; }
+function getProviderSubscription(provider_id) { const d = read(); return d.provider_subscriptions.find(p => p.provider_id === provider_id); }
+
+// Requests & Quotes (request-driven marketplace)
+function insertRequest(reqRec) {
+  const d = read();
+  const now = new Date().toISOString();
+  const r = {
+    id: reqRec.id || uuidv4(),
+    title: reqRec.title,
+    description: reqRec.description || '',
+    category_path: reqRec.category_path || null,
+    location: reqRec.location || null,
+    budget_min: reqRec.budget_min || null,
+    budget_max: reqRec.budget_max || null,
+    posted_by: reqRec.posted_by,
+    status: reqRec.status || 'open',
+    created_at: now
+  };
+  d.requests.push(r);
+  write(d);
+  return r;
+}
+
+function getRequestById(id) { const d = read(); return d.requests.find(x => x.id === id); }
+
+function searchRequests({ category_path, location, distance_km, budget_min, budget_max }) {
+  const d = read();
+  let rows = d.requests.filter(r => r.status === 'open');
+  if (category_path) rows = rows.filter(r => (r.category_path || '').startsWith(category_path));
+  if (budget_min) rows = rows.filter(r => (r.budget_max === null || r.budget_max >= budget_min));
+  if (budget_max) rows = rows.filter(r => (r.budget_min === null || r.budget_min <= budget_max));
+  // location filtering is best-effort; providers will do local matching in their client
+  return rows;
+}
+
+function getRequestsByUser(user_id) { const d = read(); return d.requests.filter(r => r.posted_by === user_id); }
+
+function insertQuote(q) {
+  const d = read();
+  const now = new Date().toISOString();
+  const rec = {
+    id: q.id || uuidv4(),
+    request_id: q.request_id,
+    provider_id: q.provider_id,
+    amount: q.amount || null,
+    message: q.message || null,
+    status: q.status || 'submitted',
+    created_at: now
+  };
+  d.quotes.push(rec);
+  write(d);
+  return rec;
+}
+
+function getQuotesByRequestId(request_id) { const d = read(); return d.quotes.filter(x => x.request_id === request_id); }
+function getQuoteById(id) { const d = read(); return d.quotes.find(x => x.id === id); }
+
+function countQuotesByProviderInWindow(provider_id, days=7) {
+  const d = read();
+  const cutoff = Date.now() - (days * 24 * 60 * 60 * 1000);
+  return d.quotes.filter(q => q.provider_id === provider_id && new Date(q.created_at).getTime() >= cutoff).length;
+}
+
+function updateRequest(id, fields) { const d = read(); let updated = null; d.requests = d.requests.map(r => { if (r.id !== id) return r; const merged = { ...r, ...fields }; updated = merged; return merged; }); write(d); return updated; }
+
+function updateQuote(id, fields) { const d = read(); let updated = null; d.quotes = d.quotes.map(q => { if (q.id !== id) return q; const merged = { ...q, ...fields }; updated = merged; return merged; }); write(d); return updated; }
+
 module.exports = {
   init,
   getCategories,
@@ -354,4 +480,38 @@ module.exports = {
   // settings
   insertServiceSetting,
   getSettingsByServiceId
+  ,
+  // payments/escrow
+  insertPayment,
+  getPaymentById,
+  insertEscrow,
+  getEscrowById,
+  updateEscrow,
+  // jobs
+  insertJob,
+  getJobById,
+  insertJobApplication,
+  getApplicationsByJobId,
+  // digital
+  insertDigitalProduct,
+  getProductById,
+  insertPurchase,
+  hasAccessToProduct,
+  // subscriptions
+  insertSubscriptionPlan,
+  getSubscriptionPlanById,
+  subscribeProvider,
+  getProviderSubscription,
+  // requests & quotes
+  insertRequest,
+  getRequestById,
+  searchRequests,
+  insertQuote,
+  getQuotesByRequestId,
+  getQuoteById,
+  countQuotesByProviderInWindow,
+  updateRequest,
+  updateQuote,
+  // helpers
+  getAllServices
 };
